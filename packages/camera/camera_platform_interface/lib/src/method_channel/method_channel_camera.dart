@@ -253,6 +253,8 @@ class MethodChannelCamera extends CameraPlatform {
         'cameraId': options.cameraId,
         'maxVideoDuration': options.maxDuration?.inMilliseconds,
         'enableStream': options.streamCallback != null,
+        'enableChunking': options.enableChunking,
+        'chunkDurationInSeconds': options.chunkDuration,
       },
     );
 
@@ -278,6 +280,16 @@ class MethodChannelCamera extends CameraPlatform {
 
     return XFile(path);
   }
+
+  Future<XFile> stopVideoRecordingWithChunking(
+      int cameraId, bool chunkingEnabled) async {
+    final String? path = await _channel.invokeMethod<String>(
+      'stopVideoRecordingWithChunking',
+      <String, dynamic>{
+        'cameraId': cameraId,
+        'enableChunking': chunkingEnabled,
+      },
+    );
 
   @override
   Future<void> pauseVideoRecording(int cameraId) => _channel.invokeMethod<void>(

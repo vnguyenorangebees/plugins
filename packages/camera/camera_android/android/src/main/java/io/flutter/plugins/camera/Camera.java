@@ -746,8 +746,12 @@ class Camera
             dartMessenger.error(flutterResult, errorCode, errorMessage, null));
   }
 
+  Consumer<String> chunkFilePathConsumer = chunkFilePath -> {
+    Log.i(TAG, "Chunk recorded at path: " + chunkFilePath);
+  };
+
   public void startVideoRecording(
-      @NonNull Result result, @Nullable EventChannel imageStreamChannel) {
+          @NonNull Result result, @Nullable EventChannel imageStreamChannel, @Nullable boolean enableChunking, @Nullable int chunkDurationInSeconds) {
     prepareRecording(result);
 
     if (imageStreamChannel != null) {
@@ -757,6 +761,11 @@ class Camera
     recordingVideo = true;
     try {
       startCapture(true, imageStreamChannel != null);
+      if (enableChunking) {
+        // Start the chunking handler with the specified duration
+        startChunkingHandler(chunkDurationInSeconds * 1000, chunkFilePathConsumer);
+      }
+
       result.success(null);
     } catch (CameraAccessException e) {
       recordingVideo = false;
@@ -765,14 +774,63 @@ class Camera
     }
   }
 
-  public void stopVideoRecording(@NonNull final Result result) {
+  private void startChunkingHandler(int chunkDuration) {
+    // Create a new Handler and Runnable to handle the seamless video chunking
+    final Handler chunkingHandler = new Handler();
+    final Runnable chunkingRunnable = new Runnable() {
+      @Override
+      public void run() {
+        if (recordingVideo) {
+          try {
+            // Define a callback to start the next chunk after stopping the current one
+            Runnable startNextChunkCallback = () -> {
+              try {
+                startCapture(true, true); // Restart the recording for the next chunk
+              } catch (CameraAccessException e) {
+                Log.e(TAG, "Failed to restart recording for chunking", e);
+              }
+            };
+
+            // Stop the current recording and start the next chunk using the callback
+            Result result = new Result() {
+              @Override
+              public void success(Object result) {
+              }
+
+              @Override
+              public void error(String errorCode, String errorMessage, Object errorDetails) {
+              }
+
+              @Override
+              public void notImplemented() {
+              }
+            };
+
+            stopVideoRecording(result, true, startNextChunkCallback, chunkFilePathConsumer);
+
+            // Schedule the next chunking iteration
+            chunkingHandler.postDelayed(this, chunkDuration);
+          } catch (Exception e) {
+            Log.e(TAG, "Failed to restart recording for chunking", e);
+          }
+        }
+      }
+    };
+
+    // Schedule the first chunking iteration
+    chunkingHandler.postDelayed(chunkingRunnable, chunkDuration);
+  }
+
+
+  public void stopVideoRecording(@NonNull final Result result, @Nullable Runnable onStoppedCallback, @Nullable Consumer<String> onFilePathConsumer) {
     if (!recordingVideo) {
       result.success(null);
       return;
     }
+
     // Re-create autofocus feature so it's using continuous capture focus mode now.
     cameraFeatures.setAutoFocus(
-        cameraFeatureFactory.createAutoFocusFeature(cameraProperties, false));
+            cameraFeatureFactory.createAutoFocusFeature(cameraProperties, false));
     recordingVideo = false;
     try {
       captureSession.abortCaptures();
@@ -787,7 +845,16 @@ class Camera
       result.error("videoRecordingFailed", e.getMessage(), null);
       return;
     }
-    result.success(captureFile.getAbsolutePath());
+    // Invoke the callback if provided
+    if (onStoppedCallback != null) {
+      onStoppedCallback.run();
+    }
+
+//    result.success(captureFile.getAbsolutePath());
+
+    if (onFilePathConsumer != null) {
+      onFilePathConsumer.accept(captureFile.getAbsolutePath());
+    }
     captureFile = null;
   }
 

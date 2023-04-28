@@ -118,17 +118,26 @@ final class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
           break;
         }
       case "startVideoRecording":
-        {
-          camera.startVideoRecording(
-              result,
-              Objects.equals(call.argument("enableStream"), true) ? imageStreamChannel : null);
-          break;
-        }
+      {
+        boolean chunkingEnabled = call.argument("enableChunking");
+        boolean chunkDurationInSeconds = call.argument("chunkDurationInSeconds");
+
+        camera.startVideoRecording(
+                result,
+                Objects.equals(call.argument("enableStream"), true) ? imageStreamChannel : null, chunkingEnabled, chunkDurationInSeconds);
+        break;
+      }
       case "stopVideoRecording":
-        {
-          camera.stopVideoRecording(result);
-          break;
-        }
+      {
+        camera.stopVideoRecording(result);
+        break;
+      }
+      case "stopVideoRecordingWithChunking":
+      {
+        boolean chunkingEnabled = call.argument("enableChunking");
+        camera.stopVideoRecording(result, chunkingEnabled);
+        break;
+      }
       case "pauseVideoRecording":
         {
           camera.pauseVideoRecording(result);
